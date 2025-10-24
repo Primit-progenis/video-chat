@@ -277,17 +277,14 @@
             call.on('stream', (remoteStream) => {
                 console.debug('Received remote stream from', call.peer, remoteStream);
 
-                // Verify stream has active tracks
                 const videoTracks = remoteStream.getVideoTracks();
-                const audioTracks = remoteStream.getAudioTracks();
-                
                 if (videoTracks.length === 0) {
                     console.warn('No video tracks in remote stream');
                     msg.textContent = 'Peer camera not available';
                     return;
                 }
 
-                // Monitor track states
+                // Monitor track states (Keep existing monitoring logic)
                 videoTracks.forEach(track => {
                     track.onended = () => {
                         console.warn('Video track ended');
@@ -309,116 +306,67 @@
                     remoteVideo.id = remoteElId;
                     remoteVideo.playsinline = true;
                     remoteVideo.autoplay = true;
-                    remoteVideo.muted = true; // Start muted to help with autoplay
+                    // Always start muted to increase chance of initial successful autoplay
+                    remoteVideo.muted = true; 
                     remoteVideo.style.borderRadius = '10px';
                     remoteVideo.style.background = '#000';
                     document.getElementById('remoteVideos').appendChild(remoteVideo);
                 }
 
-                // Add loading indicator
-                msg.textContent = 'Connecting remote stream...';
+                // --- Core Fix for Black Screen (Autoplay Issues) ---
 
-                // Handle video loading with additional checks
-                remoteVideo.onloadedmetadata = async () => {
-                    // Ensure the video element is visible and has valid size
-                    if (remoteVideo.offsetWidth === 0 || remoteVideo.offsetHeight === 0) {
-                        console.warn('Video element not visible, waiting...');
-                        await new Promise(resolve => setTimeout(resolve, 1000));
+                const playRemoteVideo = async () => {
+                    // Check if stream is active before attempting to set
+                    if (!remoteStream.active) {
+                        console.warn('Remote stream not active, cannot play.');
+                        msg.textContent = 'Remote stream is not active.';
+                        return;
                     }
 
-                    try {
-                        // Check if stream is still valid
-                        if (!remoteStream.active || remoteStream.getVideoTracks()[0]?.readyState !== 'live') {
-                            throw new Error('Stream not active or video track not live');
-                        }
+                    remoteVideo.srcObject = remoteStream;
+                    msg.textContent = 'Connecting remote stream...';
 
+                    try {
+                        // Attempt to play the video. Browsers allow muted autoplay.
                         await remoteVideo.play();
+                        
+                        // If successful, attempt to UNMUTE it. This may fail and is fine.
                         remoteVideo.muted = false;
                         msg.textContent = '';
                         console.debug('Remote video playing successfully');
-                        
-                        // Verify video is actually playing
-                        if (remoteVideo.currentTime === 0 || remoteVideo.paused) {
-                            throw new Error('Video not actually playing');
-                        }
                     } catch (err) {
-                        console.warn('Initial play failed:', err);
-                        retryPlay();
-                    }
-                };
+                        // Play failed (likely due to browser blocking unmuted autoplay)
+                        console.warn('Autoplay failed, user interaction required:', err.name);
+                        
+                        // Fallback: Notify user to interact and add an event listener
+                        msg.textContent = 'Click to enable video/audio from ' + call.peer;
 
-                // Enhanced retry logic for autoplay and black screen issues
-                let retryCount = 0;
-                const retryPlay = async () => {
-                    if (retryCount >= 3) {
-                        msg.textContent = 'Click anywhere to enable video';
-                        document.body.addEventListener('click', async () => {
-                            try {
-                                // Re-check stream before playing
-                                if (!remoteStream.active) {
-                                    console.warn('Stream inactive, attempting to reconnect...');
-                                    if (currentCall) {
-                                        // Request a new stream
-                                        currentCall.peerConnection.negotiateOffer();
-                                    }
-                                    return;
+                        const enablePlaybackOnClick = async () => {
+                            // Check if playback is still paused
+                            if (remoteVideo.paused) {
+                                try {
+                                    // Try playing again after user click/touch
+                                    await remoteVideo.play();
+                                    // Now it's playing, unmuting it should work.
+                                    remoteVideo.muted = false;
+                                    msg.textContent = '';
+                                    console.debug('Playback enabled by user interaction.');
+                                } catch (e) {
+                                    console.error('Playback failed even after user interaction:', e);
+                                    msg.textContent = 'Video playback failed. Try reconnecting.';
                                 }
-
-                                // Ensure video track is enabled
-                                const videoTrack = remoteStream.getVideoTracks()[0];
-                                if (videoTrack) {
-                                    videoTrack.enabled = true;
-                                }
-
-                                // Try playing again
-                                await remoteVideo.play();
-                                remoteVideo.muted = false;
-                                msg.textContent = '';
-                                
-                                // Monitor video state
-                                const checkVideo = setInterval(() => {
-                                    if (!remoteVideo.paused && remoteVideo.currentTime > 0) {
-                                        clearInterval(checkVideo);
-                                    } else if (retryCount < 5) {
-                                        console.warn('Video stalled, retrying...');
-                                        remoteVideo.srcObject = null;
-                                        remoteVideo.srcObject = remoteStream;
-                                        remoteVideo.play().catch(console.error);
-                                        retryCount++;
-                                    }
-                                }, 1000);
-                            } catch (e) {
-                                console.error('Play failed after click:', e);
-                                msg.textContent = 'Video playback failed. Please try reconnecting.';
                             }
-                        }, { once: true });
-                        return;
-                    }
-                    
-                    retryCount++;
-                    try {
-                        // Check stream state
-                        if (!remoteStream.active || remoteStream.getVideoTracks()[0]?.readyState !== 'live') {
-                            throw new Error('Stream not ready');
-                        }
-
-                        // Reset video source
-                        remoteVideo.srcObject = null;
-                        await new Promise(resolve => setTimeout(resolve, 100));
-                        remoteVideo.srcObject = remoteStream;
+                            // Clean up the temporary listener
+                            document.body.removeEventListener('click', enablePlaybackOnClick);
+                        };
                         
-                        await remoteVideo.play();
-                        remoteVideo.muted = false;
-                        msg.textContent = '';
-                        console.debug('Play succeeded on retry', retryCount);
-                    } catch (err) {
-                        console.warn(`Play retry ${retryCount} failed:`, err);
-                        setTimeout(retryPlay, 1000);
+                        // Attach the listener only if it hasn't been attached already
+                        document.body.addEventListener('click', enablePlaybackOnClick, { once: true });
                     }
                 };
 
-                // Set stream and begin playback process
-                remoteVideo.srcObject = remoteStream;
+                // Start the play sequence immediately
+                playRemoteVideo();
             });
 
             call.on('close', () => {
@@ -451,6 +399,7 @@
                 updateButtons();
             });
         }
+
 
         function setupDataConnection(peerIdToConnect) {
             if (!peer) return;
