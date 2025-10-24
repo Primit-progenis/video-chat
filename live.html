@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Video Chat Room</title>
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <style>
+        body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; margin: 1.2rem; }
+        video { width: 100%; max-width: 720px; background: #000; border-radius: 6px; }
+        .controls { margin-top: .6rem; display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; }
+        button, select, label { font-size: .95rem; padding: .45rem .7rem; border-radius:6px; border:1px solid #ccc; background:#f7f7f7; }
+        #msg { margin-top:.6rem; color:#c00; }
+    </style>
+</head>
+<body>
+    <h1>Video Chat Room</h1>
+
+    <div id="videos">
+        <video id="preview" playsinline autoplay muted></video>
+        <div id="remoteVideos"></div>
+    </div>
+
+    <div class="controls">
+        <button id="startBtn">Start Camera & Mic</button>
+        <button id="stopBtn" disabled>Stop</button>
+        <label>
+            <input type="checkbox" id="muteAudio"> Mute audio
+        </label>
+        <select id="videoSelect"></select>
+        <select id="audioSelect"></select>
+        <input type="text" id="peerId" placeholder="Your name/ID">
+        <button id="connectBtn" disabled>Connect</button>
+        <input type="text" id="remotePeerId" placeholder="Friend's name/ID">
+        <button id="callBtn" disabled>Call</button>
+    </div>
+
+    <div id="msg"></div>
+
+    <script>
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const preview = document.getElementById('preview');
+        const msg = document.getElementById('msg');
+        const muteAudio = document.getElementById('muteAudio');
+        const videoSelect = document.getElementById('videoSelect');
+        const audioSelect = document.getElementById('audioSelect');
+
+        let currentStream = null;
+
+        async function listDevices() {
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const vids = devices.filter(d => d.kind === 'videoinput');
+                const auds = devices.filter(d => d.kind === 'audioinput');
+
+                videoSelect.innerHTML = vids.map(v => `<option value="${v.deviceId}">${v.label || 'Camera ' + (vids.indexOf(v)+1)}</option>`).join('');
+                audioSelect.innerHTML = auds.map(a => `<option value="${a.deviceId}">${a.label || 'Microphone ' + (auds.indexOf(a)+1)}</option>`).join('');
+            } catch (e) {
+                // enumerateDevices may fail if no prior permission; ignore silently
+            }
+        }
+
+        async function start() {
+            stop(); // stop any existing stream
+            msg.textContent = '';
+            const constraints = {
+                video: videoSelect.value ? { deviceId: { exact: videoSelect.value } } : true,
+                audio: audioSelect.value ? { deviceId: { exact: audioSelect.value } } : true
+            };
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                currentStream = stream;
+                preview.srcObject = stream;
+                preview.muted = muteAudio.checked;
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                await listDevices(); // update labels now that permission is granted
+            } catch (err) {
+                msg.textContent = 'Could not get camera/microphone: ' + (err && err.message ? err.message : err);
+            }
+        }
+
+        function stop() {
+            if (!currentStream) return;
+            currentStream.getTracks().forEach(t => t.stop());
+            preview.srcObject = null;
+            currentStream = null;
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+        }
+
+        // Keep preview audio muted based on checkbox
+        muteAudio.addEventListener('change', () => {
+            preview.muted = muteAudio.checked;
+        });
+
+        startBtn.addEventListener('click', start);
+        stopBtn.addEventListener('click', stop);
+
+        // Peer connection setup
+        const peerId = document.getElementById('peerId');
+        const connectBtn = document.getElementById('connectBtn');
+        const remotePeerId = document.getElementById('remotePeerId');
+        const callBtn = document.getElementById('callBtn');
+        let peer = null;
+
+        function setupPeer() {
+            if (!currentStream) return;
+            
+            peer = new Peer();
+            
+            peer.on('open', (id) => {
+                peerId.value = id;
+                connectBtn.disabled = false;
+                msg.textContent = 'Connected to server. Share your ID with friends!';
+            });
+
+            peer.on('call', (call) => {
+                if (confirm(`Accept call from ${call.peer}?`)) {
+                    call.answer(currentStream);
+                    handleCall(call);
+                }
+            });
+
+            peer.on('error', (err) => {
+                msg.textContent = 'Connection error: ' + err.message;
+            });
+        }
+
+        function handleCall(call) {
+            call.on('stream', (remoteStream) => {
+                const remoteVideo = document.createElement('video');
+                remoteVideo.id = 'remote-' + call.peer;
+                remoteVideo.playsinline = true;
+                remoteVideo.autoplay = true;
+                remoteVideo.srcObject = remoteStream;
+                document.getElementById('remoteVideos').appendChild(remoteVideo);
+            });
+
+            call.on('close', () => {
+                document.getElementById('remote-' + call.peer)?.remove();
+            });
+        }
+
+        connectBtn.addEventListener('click', setupPeer);
+
+        callBtn.addEventListener('click', () => {
+            if (!peer || !currentStream || !remotePeerId.value) return;
+            const call = peer.call(remotePeerId.value, currentStream);
+            handleCall(call);
+        });
+
+        // Enable call button when remote peer ID is entered
+        remotePeerId.addEventListener('input', () => {
+            callBtn.disabled = !remotePeerId.value || !peer || !currentStream;
+        });
+
+        // Update device lists and enable connect button when stream starts
+        async function start() {
+            stop();
+            msg.textContent = '';
+            const constraints = {
+                video: videoSelect.value ? { deviceId: { exact: videoSelect.value } } : true,
+                audio: audioSelect.value ? { deviceId: { exact: audioSelect.value } } : true
+            };
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                currentStream = stream;
+                preview.srcObject = stream;
+                preview.muted = muteAudio.checked;
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                connectBtn.disabled = !currentStream;
+                await listDevices();
+            } catch (err) {
+                msg.textContent = 'Could not get camera/microphone: ' + (err && err.message ? err.message : err);
+            }
+        }
+
+        // Populate device lists on load (may be empty until permission granted)
+        listDevices();
+
+        // Helpful note for users when running from file:// or insecure origins
+        if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+            const note = document.createElement('div');
+            note.style.marginTop = '.6rem';
+            note.style.color = '#666';
+            note.textContent = 'Note: getUserMedia typically requires HTTPS or localhost. If permissions fail, serve this file over HTTPS or run a local server.';
+            document.body.appendChild(note);
+        }
+    </script>
+</body>
+</html>
