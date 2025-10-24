@@ -260,12 +260,9 @@
             });
         }
 
-        function isSameStream(a, b) {
-            if (!a || !b) return false;
-            const aIds = a.getTracks().map(t => t.id).sort().join(',');
-            const bIds = b.getTracks().map(t => t.id).sort().join(',');
-            return aIds === bIds;
-        }
+        // NOTE: removed strict stream-equality checks because track IDs may occasionally
+        // collide or be reported similarly across environments; instead we rely on
+        // the MediaStream contents and connection peer IDs to manage duplicates.
 
         function handleCall(call) {
             // Close any existing call first
@@ -278,11 +275,7 @@
             const remoteElId = 'remote-' + call.peer;
 
             call.on('stream', (remoteStream) => {
-                // Avoid showing the same stream twice (sometimes local and remote can appear identical)
-                if (isSameStream(remoteStream, currentStream)) {
-                    // don't append remote video if it's identical to local
-                    return;
-                }
+                console.debug('Received remote stream from', call.peer, remoteStream);
 
                 let remoteVideo = document.getElementById(remoteElId);
                 if (!remoteVideo) {
@@ -290,10 +283,22 @@
                     remoteVideo.id = remoteElId;
                     remoteVideo.playsinline = true;
                     remoteVideo.autoplay = true;
+                    remoteVideo.muted = false; // allow remote audio
                     remoteVideo.style.borderRadius = '10px';
+                    remoteVideo.style.background = '#000';
                     document.getElementById('remoteVideos').appendChild(remoteVideo);
                 }
+                // assign stream and attempt to play explicitly
                 remoteVideo.srcObject = remoteStream;
+                // some browsers require calling play() after setting srcObject
+                const tryPlay = async () => {
+                    try {
+                        await remoteVideo.play();
+                    } catch (err) {
+                        console.debug('remoteVideo.play() failed:', err);
+                    }
+                };
+                tryPlay();
             });
 
             call.on('close', () => {
