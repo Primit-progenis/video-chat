@@ -232,13 +232,40 @@
                 return;
             }
 
-            if (peer) return; // already connected
+            if (peer) {
+                console.debug('Peer already exists:', peer.id);
+                // Update UI with existing peer ID if available
+                if (peer.id) {
+                    peerId.value = peer.id;
+                    msg.textContent = 'Connected to server. Share your ID with friends!';
+                }
+                return;
+            }
 
-            peer = new Peer();
+            // Initialize PeerJS with random ID generation
+            peer = new Peer(undefined, {
+                debug: 2 // Enable debug logging
+            });
 
             peer.on('open', (id) => {
+                console.debug('Connected with peer ID:', id);
                 peerId.value = id;
                 msg.textContent = 'Connected to server. Share your ID with friends!';
+                updateButtons();
+            });
+
+            // Handle disconnection from the signaling server
+            peer.on('disconnected', () => {
+                console.warn('Disconnected from signaling server, attempting to reconnect...');
+                msg.textContent = 'Connection lost. Reconnecting...';
+                peer.reconnect();
+            });
+
+            // Handle permanent disconnection
+            peer.on('close', () => {
+                console.warn('Connection closed');
+                msg.textContent = 'Connection closed. Please refresh to reconnect.';
+                peer = null;
                 updateButtons();
             });
 
