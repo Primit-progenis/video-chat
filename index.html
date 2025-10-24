@@ -277,28 +277,75 @@
             call.on('stream', (remoteStream) => {
                 console.debug('Received remote stream from', call.peer, remoteStream);
 
+                // Log track info for debugging
+                const tracks = remoteStream.getTracks();
+                console.debug('Remote stream tracks:', tracks.map(t => ({
+                    kind: t.kind,
+                    enabled: t.enabled,
+                    readyState: t.readyState
+                })));
+
                 let remoteVideo = document.getElementById(remoteElId);
                 if (!remoteVideo) {
                     remoteVideo = document.createElement('video');
                     remoteVideo.id = remoteElId;
                     remoteVideo.playsinline = true;
                     remoteVideo.autoplay = true;
-                    remoteVideo.muted = false; // allow remote audio
+                    // Start muted to help with autoplay
+                    remoteVideo.muted = true;
                     remoteVideo.style.borderRadius = '10px';
                     remoteVideo.style.background = '#000';
                     document.getElementById('remoteVideos').appendChild(remoteVideo);
                 }
-                // assign stream and attempt to play explicitly
-                remoteVideo.srcObject = remoteStream;
-                // some browsers require calling play() after setting srcObject
-                const tryPlay = async () => {
+
+                // Add loading indicator
+                msg.textContent = 'Connecting remote stream...';
+
+                // Handle video loading
+                remoteVideo.onloadedmetadata = async () => {
                     try {
                         await remoteVideo.play();
+                        // Unmute after successful play
+                        remoteVideo.muted = false;
+                        msg.textContent = '';
+                        console.debug('Remote video playing successfully');
                     } catch (err) {
-                        console.debug('remoteVideo.play() failed:', err);
+                        console.warn('Initial play failed:', err);
+                        retryPlay();
                     }
                 };
-                tryPlay();
+
+                // Retry logic for autoplay issues
+                let retryCount = 0;
+                const retryPlay = async () => {
+                    if (retryCount >= 3) {
+                        msg.textContent = 'Click anywhere to enable video';
+                        document.body.addEventListener('click', async () => {
+                            try {
+                                await remoteVideo.play();
+                                remoteVideo.muted = false;
+                                msg.textContent = '';
+                            } catch (e) {
+                                console.error('Play failed after click:', e);
+                            }
+                        }, { once: true });
+                        return;
+                    }
+                    
+                    retryCount++;
+                    try {
+                        await remoteVideo.play();
+                        remoteVideo.muted = false;
+                        msg.textContent = '';
+                        console.debug('Play succeeded on retry', retryCount);
+                    } catch (err) {
+                        console.warn(`Play retry ${retryCount} failed:`, err);
+                        setTimeout(retryPlay, 1000);
+                    }
+                };
+
+                // Set stream and begin playback process
+                remoteVideo.srcObject = remoteStream;
             });
 
             call.on('close', () => {
