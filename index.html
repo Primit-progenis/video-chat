@@ -6,15 +6,115 @@
     <title>Video Chat Room</title>
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <style>
-        body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; margin: 1.2rem; }
-        video { width: 100%; max-width: 720px; background: #000; border-radius: 6px; }
-        .controls { margin-top: .6rem; display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; }
-        button, select, label { font-size: .95rem; padding: .45rem .7rem; border-radius:6px; border:1px solid #ccc; background:#f7f7f7; }
-        #msg { margin-top:.6rem; color:#c00; }
+        :root{
+            --bg: #040404;
+            --panel: #080202; /* deep black with slight red tint */
+            --muted: #cfcfcf;
+            --accent: #ff2d2d; /* vivid red accent */
+            --glass: rgba(255,45,45,0.06);
+            --glass-2: rgba(255,255,255,0.02);
+        }
+
+        html,body{height:100%;}
+        body{
+            margin:0;
+            min-height:100%;
+            background: linear-gradient(180deg, var(--bg), #000000 60%);
+            color: #f3f3f3;
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+            -webkit-font-smoothing:antialiased;
+            padding:28px;
+            box-sizing:border-box;
+        }
+
+        .topbar{
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            gap:12px;
+            margin-bottom:18px;
+            border-bottom:1px solid var(--glass-2);
+            padding-bottom:12px;
+        }
+
+        .brand{
+            font-weight:700;
+            letter-spacing:0.4px;
+            font-size:18px;
+            color:var(--accent);
+        }
+
+        .subtitle{ color:var(--muted); font-size:13px }
+
+        #videos{ display:flex; gap:18px; flex-wrap:wrap; align-items:flex-start }
+
+        video{ display:block; width:100%; max-width:720px; background:#000; border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,0.7); border:1px solid rgba(255,0,0,0.06) }
+        /* Mirror only the local preview so it looks natural to the user */
+        #preview{ transform: scaleX(-1); }
+        /* Remote videos should not be mirrored */
+        #remoteVideos video{ transform: none; }
+
+        #remoteVideos{ display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:12px; width:100%; max-width:720px }
+
+        .controls{
+            margin-top:18px;
+            display:flex;
+            gap:10px;
+            align-items:center;
+            flex-wrap:wrap;
+            background:linear-gradient(180deg, rgba(0,0,0,0.6), rgba(8,0,0,0.4));
+            padding:10px;
+            border-radius:12px;
+            border:1px solid var(--glass-2);
+            max-width:100%;
+        }
+
+        .controls .left, .controls .center, .controls .right{ display:flex; gap:8px; align-items:center }
+
+        button{
+            background:transparent;
+            border:1px solid rgba(255,45,45,0.08);
+            color:inherit;
+            padding:8px 12px;
+            border-radius:10px;
+            font-size:13px;
+            cursor:pointer;
+        }
+
+        button.primary{ background: linear-gradient(180deg, rgba(255,45,45,0.14), rgba(255,45,45,0.06)); border-color: rgba(255,45,45,0.35); color:#fff }
+        button.muted{ opacity:0.85 }
+
+        input[type="text"], select{
+            background:transparent;
+            border:1px solid rgba(255,255,255,0.03);
+            color:inherit;
+            padding:8px 10px;
+            border-radius:10px;
+            font-size:13px;
+            min-width:120px;
+        }
+
+        input::placeholder{ color: rgba(255,255,255,0.35) }
+
+        label{ color:var(--muted); font-size:13px }
+
+        #msg{ margin-top:12px; color: #ffbfbf; font-size:13px }
+
+        @media (max-width:720px){
+            #videos{ flex-direction:column; }
+            video{ max-width:100%; }
+            .controls{ padding:12px }
+        }
     </style>
 </head>
 <body>
-    <h1>Video Chat Room</h1>
+    <header class="topbar">
+        <div>
+            <div class="brand">Video Chat</div>
+            <div class="subtitle">Minimal peer-to-peer calls</div>
+        </div>
+        <div class="subtitle">secure • low-latency • no server media</div>
+    </header>
 
     <div id="videos">
         <video id="preview" playsinline autoplay muted></video>
@@ -22,17 +122,23 @@
     </div>
 
     <div class="controls">
-        <button id="startBtn">Start Camera & Mic</button>
-        <button id="stopBtn" disabled>Stop</button>
-        <label>
-            <input type="checkbox" id="muteAudio"> Mute audio
-        </label>
-        <select id="videoSelect"></select>
-        <select id="audioSelect"></select>
-        <input type="text" id="peerId" placeholder="Your name/ID">
-        <button id="connectBtn" disabled>Connect</button>
-        <input type="text" id="remotePeerId" placeholder="Friend's name/ID">
-        <button id="callBtn" disabled>Call</button>
+        <div class="left">
+            <button id="startBtn" class="primary">Start</button>
+            <button id="stopBtn" disabled class="muted">Stop</button>
+            <label><input type="checkbox" id="muteAudio"> mute</label>
+        </div>
+
+        <div class="center">
+            <select id="videoSelect"></select>
+            <select id="audioSelect"></select>
+        </div>
+
+        <div class="right">
+            <input type="text" id="peerId" placeholder="Your ID">
+            <button id="connectBtn" disabled>Connect</button>
+            <input type="text" id="remotePeerId" placeholder="Peer ID">
+            <button id="callBtn" disabled>Call</button>
+        </div>
     </div>
 
     <div id="msg"></div>
@@ -103,57 +209,219 @@
         const connectBtn = document.getElementById('connectBtn');
         const remotePeerId = document.getElementById('remotePeerId');
         const callBtn = document.getElementById('callBtn');
-        let peer = null;
+        const endBtn = document.createElement('button');
+        endBtn.id = 'endCallBtn';
+        endBtn.textContent = 'End';
+        endBtn.disabled = true;
+        endBtn.className = '';
+        // append end button next to callBtn
+        callBtn.parentNode.insertBefore(endBtn, callBtn.nextSibling);
+    let peer = null;
+    let currentCall = null;
+    let currentDataConn = null; // DataConnection used to notify hangup
+
+        function updateButtons() {
+            connectBtn.disabled = !currentStream || !!peer;
+            callBtn.disabled = !remotePeerId.value || !peer || !currentStream;
+            endBtn.disabled = !currentCall;
+        }
 
         function setupPeer() {
-            if (!currentStream) return;
-            
+            if (!currentStream) {
+                msg.textContent = 'Start camera/mic before connecting.';
+                return;
+            }
+
+            if (peer) return; // already connected
+
             peer = new Peer();
-            
+
             peer.on('open', (id) => {
                 peerId.value = id;
-                connectBtn.disabled = false;
                 msg.textContent = 'Connected to server. Share your ID with friends!';
+                updateButtons();
             });
 
             peer.on('call', (call) => {
+                // auto-answer after confirmation
                 if (confirm(`Accept call from ${call.peer}?`)) {
                     call.answer(currentStream);
                     handleCall(call);
+                    // ensure a data connection exists for hangup signalling
+                    setupDataConnection(call.peer);
+                } else {
+                    // optionally notify caller
+                    call.close();
                 }
             });
 
             peer.on('error', (err) => {
-                msg.textContent = 'Connection error: ' + err.message;
+                msg.textContent = 'Connection error: ' + (err && err.message ? err.message : err);
             });
+        }
+
+        function isSameStream(a, b) {
+            if (!a || !b) return false;
+            const aIds = a.getTracks().map(t => t.id).sort().join(',');
+            const bIds = b.getTracks().map(t => t.id).sort().join(',');
+            return aIds === bIds;
         }
 
         function handleCall(call) {
+            // Close any existing call first
+            if (currentCall && currentCall !== call) {
+                try { currentCall.close(); } catch(e){}
+            }
+            currentCall = call;
+            updateButtons();
+
+            const remoteElId = 'remote-' + call.peer;
+
             call.on('stream', (remoteStream) => {
-                const remoteVideo = document.createElement('video');
-                remoteVideo.id = 'remote-' + call.peer;
-                remoteVideo.playsinline = true;
-                remoteVideo.autoplay = true;
+                // Avoid showing the same stream twice (sometimes local and remote can appear identical)
+                if (isSameStream(remoteStream, currentStream)) {
+                    // don't append remote video if it's identical to local
+                    return;
+                }
+
+                let remoteVideo = document.getElementById(remoteElId);
+                if (!remoteVideo) {
+                    remoteVideo = document.createElement('video');
+                    remoteVideo.id = remoteElId;
+                    remoteVideo.playsinline = true;
+                    remoteVideo.autoplay = true;
+                    remoteVideo.style.borderRadius = '10px';
+                    document.getElementById('remoteVideos').appendChild(remoteVideo);
+                }
                 remoteVideo.srcObject = remoteStream;
-                document.getElementById('remoteVideos').appendChild(remoteVideo);
             });
 
             call.on('close', () => {
-                document.getElementById('remote-' + call.peer)?.remove();
+                // stop remote tracks to avoid frozen video
+                const rv = document.getElementById(remoteElId);
+                if (rv && rv.srcObject) {
+                    try { rv.srcObject.getTracks().forEach(t => t.stop()); } catch(e){}
+                }
+                document.getElementById(remoteElId)?.remove();
+                if (currentCall === call) currentCall = null;
+                // close associated data connection if any
+                if (currentDataConn && currentDataConn.peer === call.peer) {
+                    try { currentDataConn.close(); } catch(e){}
+                    currentDataConn = null;
+                }
+                updateButtons();
+            });
+
+            call.on('error', () => {
+                const rv = document.getElementById(remoteElId);
+                if (rv && rv.srcObject) {
+                    try { rv.srcObject.getTracks().forEach(t => t.stop()); } catch(e){}
+                }
+                document.getElementById(remoteElId)?.remove();
+                if (currentCall === call) currentCall = null;
+                if (currentDataConn && currentDataConn.peer === call.peer) {
+                    try { currentDataConn.close(); } catch(e){}
+                    currentDataConn = null;
+                }
+                updateButtons();
             });
         }
 
-        connectBtn.addEventListener('click', setupPeer);
+        function setupDataConnection(peerIdToConnect) {
+            if (!peer) return;
+            // If an existing data conn is open to same peer, reuse it
+            if (currentDataConn && currentDataConn.open && currentDataConn.peer === peerIdToConnect) return;
+
+            try {
+                const dc = peer.connect(peerIdToConnect);
+                currentDataConn = dc;
+
+                dc.on('open', () => {
+                    // ready to send/receive hangup messages
+                });
+
+                dc.on('data', (data) => {
+                    // Expect { type: 'hangup' }
+                    if (data && data.type === 'hangup') {
+                        // remote asked to end the call
+                        if (currentCall) {
+                            try { currentCall.close(); } catch(e){}
+                            currentCall = null;
+                        }
+                        // cleanup any remote videos
+                        document.getElementById('remoteVideos')?.querySelectorAll('video').forEach(v => {
+                            try { v.srcObject?.getTracks().forEach(t => t.stop()); } catch(e){}
+                            v.remove();
+                        });
+                        msg.textContent = 'Peer ended the call';
+                        // close this data connection
+                        try { dc.close(); } catch(e){}
+                        if (currentDataConn === dc) currentDataConn = null;
+                        updateButtons();
+                    }
+                });
+
+                dc.on('close', () => {
+                    if (currentDataConn === dc) currentDataConn = null;
+                    updateButtons();
+                });
+
+                dc.on('error', () => {
+                    if (currentDataConn === dc) currentDataConn = null;
+                    updateButtons();
+                });
+            } catch (e) {
+                // ignore
+            }
+        }
+
+        connectBtn.addEventListener('click', () => { setupPeer(); });
 
         callBtn.addEventListener('click', () => {
             if (!peer || !currentStream || !remotePeerId.value) return;
-            const call = peer.call(remotePeerId.value, currentStream);
-            handleCall(call);
+            try {
+                // ensure a data connection exists so we can signal hangup
+                setupDataConnection(remotePeerId.value);
+                const call = peer.call(remotePeerId.value, currentStream);
+                handleCall(call);
+            } catch (err) {
+                msg.textContent = 'Call failed: ' + (err && err.message ? err.message : err);
+            }
+        });
+
+        endBtn.addEventListener('click', () => {
+            // send hangup over data connection if available
+            try {
+                if (currentDataConn && currentDataConn.open) {
+                    try { currentDataConn.send({ type: 'hangup' }); } catch (e) {}
+                }
+            } catch(e) {}
+
+            // give the message a short moment to be delivered, then close
+            setTimeout(() => {
+                if (currentCall) {
+                    try { currentCall.close(); } catch(e){}
+                    currentCall = null;
+                }
+
+                // close data connection if open
+                try { if (currentDataConn) { currentDataConn.close(); currentDataConn = null; } } catch(e){}
+
+                // stop and remove any remote videos
+                const container = document.getElementById('remoteVideos');
+                container.querySelectorAll('video').forEach(v => {
+                    try { v.srcObject?.getTracks().forEach(t => t.stop()); } catch(e){}
+                    v.remove();
+                });
+
+                msg.textContent = 'You ended the call';
+                updateButtons();
+            }, 200);
         });
 
         // Enable call button when remote peer ID is entered
         remotePeerId.addEventListener('input', () => {
-            callBtn.disabled = !remotePeerId.value || !peer || !currentStream;
+            updateButtons();
         });
 
         // Update device lists and enable connect button when stream starts
@@ -171,7 +439,7 @@
                 preview.muted = muteAudio.checked;
                 startBtn.disabled = true;
                 stopBtn.disabled = false;
-                connectBtn.disabled = !currentStream;
+                updateButtons();
                 await listDevices();
             } catch (err) {
                 msg.textContent = 'Could not get camera/microphone: ' + (err && err.message ? err.message : err);
