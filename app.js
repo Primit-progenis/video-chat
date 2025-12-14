@@ -196,9 +196,26 @@ async function createPeerConnection(peerId, makeOffer=false){
         vid.play().then(()=>{ vid.muted=false; }).catch(()=>{ msg.textContent='Tap the page to enable remote audio/video'; document.body.addEventListener('click', ()=>{ vid.play().catch(()=>{}); },{once:true}); });
     };
 
-    pc.onicecandidate = (e)=>{ if(e.candidate && ws && ws.readyState===1){ ws.send(JSON.stringify({type:'candidate', to:peerId, candidate:e.candidate})); } };
+    pc.onicecandidate = (e)=>{
+        if(e.candidate && ws && ws.readyState===1){
+            ws.send(JSON.stringify({type:'candidate', to:peerId, candidate:e.candidate}));
+        }
+    };
 
-    pc.onconnectionstatechange = ()=>{ if(pc.connectionState==='failed' || pc.connectionState==='disconnected' || pc.connectionState==='closed'){ cleanupPeer(peerId); } };
+    pc.onconnectionstatechange = ()=>{
+        console.debug('PC connectionState', peerId, pc.connectionState);
+        msg.textContent = 'Peer connection state: '+peerId+' → '+pc.connectionState;
+        if(pc.connectionState==='failed' || pc.connectionState==='disconnected' || pc.connectionState==='closed'){
+            cleanupPeer(peerId);
+        }
+    };
+
+    pc.oniceconnectionstatechange = ()=>{
+        console.debug('PC iceConnectionState', peerId, pc.iceConnectionState);
+        if(pc.iceConnectionState === 'failed'){
+            msg.textContent = 'ICE failed for '+peerId;
+        }
+    };
 
     pcMap.set(peerId, {pc, dc});
 
