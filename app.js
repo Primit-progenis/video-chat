@@ -106,25 +106,56 @@ function connectSignaling(){
     });
     ws.addEventListener('message', async (ev)=>{
         const data = JSON.parse(ev.data);
-        if(data.type==='id'){ myId = data.id; msg.textContent = 'Joined room: '+room+' (you: '+myId+')'; }
-        if(data.type==='peers'){ // current peers list
-            // enforce max
-            if(data.peers.length+1 > MAX_PEERS){ msg.textContent='Room full (max '+MAX_PEERS+')'; ws.close(); return; }
-            // create offers to existing peers
+        // id response when joining
+        if(data.type === 'id'){
+            myId = data.id;
+            msg.textContent = 'Joined room: '+room+' (you: '+myId+')';
+            return;
+        }
+
+        // initial peers list
+        if(data.type === 'peers'){
+            if(data.peers.length+1 > MAX_PEERS){ msg.textContent='Room full (max '+MAX_PEERS+')'; try{ ws.close(); }catch(e){} return; }
             for(const peerId of data.peers){ if(peerId===myId) continue; await createPeerConnection(peerId, true); }
+            return;
         }
-        if(data.type==='offer'){
-            const { from, sdp } = data; await handleOffer(from, sdp);
+
+        // a peer that joined after us
+        if(data.type === 'new_peer'){
+            const peerId = data.id;
+            if(!peerId || peerId === myId) return;
+            if(pcMap.size+1 > MAX_PEERS){ msg.textContent='Room full (max '+MAX_PEERS+')'; return; }
+            if(!localStream){ msg.textContent='Start camera/mic before peers can connect.'; return; }
+            await createPeerConnection(peerId, true);
+            msg.textContent = 'Peer joined: '+peerId;
+            return;
         }
-        if(data.type==='answer'){
-            const { from, sdp } = data; const pc = pcMap.get(from)?.pc; if(pc){ await pc.setRemoteDescription(new RTCSessionDescription(sdp)); }
+
+        // peer left notification
+        if(data.type === 'peer_left'){
+            const pid = data.id; if(pid) cleanupPeer(pid); msg.textContent = 'Peer left: '+(pid||''); return;
         }
-        if(data.type==='candidate'){
-            const { from, candidate } = data; const pc = pcMap.get(from)?.pc; if(pc){ try{ await pc.addIceCandidate(new RTCIceCandidate(candidate)); }catch(e){} }
+
+        // standard offer/answer/candidate handling
+        if(data.type === 'offer'){
+            const { from, sdp } = data; await handleOffer(from, sdp); return;
         }
-        if(data.type==='room_closed'){
-            msg.textContent = 'Room closed by server';
-            ws.close();
+
+        if(data.type === 'answer'){
+            const { from, sdp } = data; const pc = pcMap.get(from)?.pc; if(pc){ await pc.setRemoteDescription(new RTCSessionDescription(sdp)); } return;
+        }
+
+        if(data.type === 'candidate'){
+            const { from, candidate } = data; const pc = pcMap.get(from)?.pc; if(pc){ try{ await pc.addIceCandidate(new RTCIceCandidate(candidate)); }catch(e){} } return;
+        }
+
+        // room/server level messages
+        if(data.type === 'room_full'){
+            msg.textContent = 'Room is full'; try{ ws.close(); }catch(e){} return;
+        }
+
+        if(data.type === 'room_closed'){
+            msg.textContent = 'Room closed by server'; try{ ws.close(); }catch(e){} return;
         }
     });
     ws.addEventListener('close', ()=>{ msg.textContent = 'Signaling disconnected'; });
