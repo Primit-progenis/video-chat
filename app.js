@@ -26,6 +26,10 @@ let room = null;
 const MAX_PEERS = 5;
 const MIN_PEERS = 2;
 
+// Debug: log if DOM elements are found
+console.log('DOM check:', { startBtn, stopBtn, preview, msg, chatMessages, chatForm, chatText, joinBtn });
+if(!chatMessages || !chatForm || !chatText){ console.error('Missing chat DOM elements!'); }
+
 async function listDevices(){
     try{
         const devices = await navigator.mediaDevices.enumerateDevices();

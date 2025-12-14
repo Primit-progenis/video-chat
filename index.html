@@ -16,32 +16,46 @@
         <div class="subtitle">secure • low-latency • no server media</div>
     </header>
 
-    <div id="videos">
-        <video id="preview" playsinline autoplay muted></video>
-        <div id="remoteVideos"></div>
+    <div id="app">
+        <div id="leftCol">
+            <div id="videos">
+                <video id="preview" playsinline autoplay muted></video>
+                <div id="remoteVideos"></div>
+            </div>
+
+            <div class="controls">
+                <div class="left">
+                    <button id="startBtn" class="primary">Start</button>
+                    <button id="stopBtn" disabled class="muted">Stop</button>
+                    <label><input type="checkbox" id="muteAudio"> mute</label>
+                </div>
+
+                <div class="center">
+                    <select id="videoSelect"></select>
+                    <select id="audioSelect"></select>
+                </div>
+
+                <div class="right">
+                    <input type="text" id="peerId" placeholder="Room name">
+                    <button id="connectBtn">Connect</button>
+                    <input type="text" id="remotePeerId" placeholder="Peer ID">
+                    <button id="callBtn" disabled>Call</button>
+                </div>
+            </div>
+
+            <div id="msg"></div>
+        </div>
+
+        <div id="rightCol">
+            <div id="chat">
+                <div id="chatMessages"></div>
+                <form id="chatForm">
+                    <input type="text" id="chatText" placeholder="Type a message..." />
+                    <button type="submit">Send</button>
+                </form>
+            </div>
+        </div>
     </div>
-
-    <div class="controls">
-        <div class="left">
-            <button id="startBtn" class="primary">Start</button>
-            <button id="stopBtn" disabled class="muted">Stop</button>
-            <label><input type="checkbox" id="muteAudio"> mute</label>
-        </div>
-
-        <div class="center">
-            <select id="videoSelect"></select>
-            <select id="audioSelect"></select>
-        </div>
-
-        <div class="right">
-            <input type="text" id="peerId" placeholder="Your ID">
-            <button id="connectBtn" disabled>Connect</button>
-            <input type="text" id="remotePeerId" placeholder="Peer ID">
-            <button id="callBtn" disabled>Call</button>
-        </div>
-    </div>
-
-    <div id="msg"></div>
 
     <script src="app.js" defer></script>
 </body>
