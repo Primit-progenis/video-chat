@@ -84,7 +84,15 @@ chatForm.addEventListener('submit', (e)=>{
     const txt = chatText.value.trim(); if(!txt) return;
     addChatMessage('You: '+txt);
     // broadcast to peers via data channels
-    pcMap.forEach(({dc})=>{ if(dc && dc.readyState==='open') try{ dc.send(JSON.stringify({type:'chat', text:txt})); }catch(e){} });
+    let sent = 0;
+    pcMap.forEach(({dc}, pid)=>{
+        if(dc && dc.readyState==='open'){
+            try{ dc.send(JSON.stringify({type:'chat', text:txt})); sent++; }
+            catch(e){ console.warn('Failed to send chat to', pid, e); }
+        }
+    });
+    if(sent === 0){ msg.textContent = 'No open data channels — waiting for peers to connect'; }
+    else { msg.textContent = 'Message sent to '+sent+' peer(s)'; }
     chatText.value='';
 });
 
@@ -201,9 +209,19 @@ async function createPeerConnection(peerId, makeOffer=false){
 }
 
 function setupDataChannel(peerId, channel){
-    channel.onopen = ()=>{ console.debug('DC open', peerId); };
-    channel.onmessage = (e)=>{ try{ const d = JSON.parse(e.data); if(d.type==='chat'){ addChatMessage(peerId+': '+d.text); } }catch(e){} };
-    channel.onclose = ()=>{ console.debug('DC closed', peerId); };
+    channel.onopen = ()=>{
+        console.debug('DC open', peerId);
+        msg.textContent = 'Data channel open with '+peerId;
+    };
+    channel.onmessage = (e)=>{
+        try{
+            const d = JSON.parse(e.data);
+            if(d.type==='chat'){
+                addChatMessage(peerId+': '+d.text);
+            }
+        }catch(err){ console.warn('Invalid DC message from', peerId, err); }
+    };
+    channel.onclose = ()=>{ console.debug('DC closed', peerId); msg.textContent = 'Data channel closed: '+peerId; };
     const rec = pcMap.get(peerId); if(rec) rec.dc = channel; else pcMap.set(peerId, {pc:null, dc:channel});
 }
 
