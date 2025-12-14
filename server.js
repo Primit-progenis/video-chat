@@ -36,7 +36,7 @@ server.on('connection', (ws, req) => {
 
             // route offer/answer/candidate to specific peer
             if(data.type==='offer' || data.type==='answer' || data.type==='candidate'){
-                const to = data.to; if(!to) return;
+                const { to } = data; if(!to) return;
                 const set = rooms.get(ws.room); if(!set) return;
                 for(const client of set){ if(client.id === to) send(client, Object.assign({}, data, {from: ws.id})); }
                 return;

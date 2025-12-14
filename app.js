@@ -88,9 +88,17 @@ chatForm.addEventListener('submit', (e)=>{
 function connectSignaling(){
     if(!room){ msg.textContent='Enter a room name first'; return; }
     if(!localStream){ msg.textContent='Start camera/mic before joining a room'; return; }
-    ws = new WebSocket((location.protocol==='https:'?'wss://':'ws://') + location.host + ':3000');
+    // Use hostname (not host) so we don't accidentally include the static server port.
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    const wsUrl = `${proto}://${location.hostname}:3000`;
+    ws = new WebSocket(wsUrl);
     ws.addEventListener('open', ()=>{
+        msg.textContent = 'Connected to signaling server';
         ws.send(JSON.stringify({type:'join', room}));
+    });
+    ws.addEventListener('error', (e)=>{
+        console.error('Signaling WS error', e);
+        msg.textContent = 'Signaling connection error';
     });
     ws.addEventListener('message', async (ev)=>{
         const data = JSON.parse(ev.data);
@@ -102,13 +110,13 @@ function connectSignaling(){
             for(const peerId of data.peers){ if(peerId===myId) continue; await createPeerConnection(peerId, true); }
         }
         if(data.type==='offer'){
-            const from = data.from; await handleOffer(from, data.sdp);
+            const { from, sdp } = data; await handleOffer(from, sdp);
         }
         if(data.type==='answer'){
-            const from = data.from; const pc = pcMap.get(from)?.pc; if(pc){ await pc.setRemoteDescription(new RTCSessionDescription(data.sdp)); }
+            const { from, sdp } = data; const pc = pcMap.get(from)?.pc; if(pc){ await pc.setRemoteDescription(new RTCSessionDescription(sdp)); }
         }
         if(data.type==='candidate'){
-            const from = data.from; const pc = pcMap.get(from)?.pc; if(pc){ try{ await pc.addIceCandidate(new RTCIceCandidate(data.candidate)); }catch(e){} }
+            const { from, candidate } = data; const pc = pcMap.get(from)?.pc; if(pc){ try{ await pc.addIceCandidate(new RTCIceCandidate(candidate)); }catch(e){} }
         }
         if(data.type==='room_closed'){
             msg.textContent = 'Room closed by server';
@@ -167,7 +175,7 @@ function setupDataChannel(peerId, channel){
 async function handleOffer(from, sdp){
     if(pcMap.size+1 > MAX_PEERS){ msg.textContent='Rejecting offer: room full'; return; }
     await createPeerConnection(from, false);
-    const pc = pcMap.get(from).pc;
+    const { pc } = pcMap.get(from);
     await pc.setRemoteDescription(new RTCSessionDescription(sdp));
     const ans = await pc.createAnswer(); await pc.setLocalDescription(ans);
     ws.send(JSON.stringify({type:'answer', to:from, sdp:pc.localDescription}));
