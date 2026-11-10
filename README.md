@@ -1,54 +1,34 @@
-# WebRTC Room (mesh) — Local demo
+# Video Chat Room
 
-This project separates the UI (`index.html` + `style.css`) from the WebRTC logic (`app.js`) and includes a minimal WebSocket signaling server (`server.js`) to form a room-based mesh. It enforces a minimum/maximum of users in a room (min 2, max 5).
+A browser-based, room-style video chat demo. The browser sends audio and video directly between participants with WebRTC. A small Node.js WebSocket server coordinates room membership and exchanges WebRTC offers, answers, and ICE candidates; it does not relay media.
 
-Quick steps:
+## How it works
 
-1. Install dependencies and run the signaling server (required):
+1. Start the local signaling server and serve the project files from localhost or an HTTPS site.
+2. Allow camera and microphone access with **Start**. The page can list available camera and microphone devices.
+3. Enter a room name and choose **Connect**. The signaling server assigns an ID and notifies other room members.
+4. WebRTC peer connections negotiate direct media streams. The browser uses Google's public STUN server to discover network routes.
+5. Chat messages travel over WebRTC data channels to connected peers.
 
-```bash
-cd "live servo"
+The server allows up to five participants in a room. The interface also includes local preview, stop, mute, device selectors, and connection status.
+
+## Run locally
+
+Requires Node.js and npm. In the project root:
+
+```sh
 npm install
 npm start
 ```
 
-2. Open the UI in your browser at: `http://localhost:3000/` if you serve the static files, or open `index.html` via a simple static server (recommended) e.g.:
+This starts the WebSocket signaling service on port 3000. In another terminal, serve the project root on localhost, for example:
 
-```bash
-# from project root
-npx http-server -c-1 . -p 8000
-# then open http://localhost:8000
+```sh
+npx http-server . -p 8000
 ```
 
-Notes / behavior:
-- The app asks for camera and microphone permissions when you press "Start".
-- Audio capture uses `echoCancellation`, `noiseSuppression`, and `autoGainControl` to reduce echo and improve clarity.
-- The signaling server is minimal — it only routes offers/answers/candidates and enforces up to 5 peers per room.
-- Chat uses WebRTC DataChannels to broadcast messages to connected peers.
-- The UI includes video on/off, mute (preview), join room, call button and a chat sidebar.
+Open the local page in your browser, start the camera and microphone, then join the same room name from another browser or device.
 
-If you'd like, I can:
-- Add a small static server to serve the UI from the same Node process.
-- Add UI polish (icons, improved layout, participants list).
-- Add a TURN server integration for NAT traversal.
+## Notes
 
-Tell me which of those you'd like next or if you want changes to controls/labels.
-# Video Chat Room
-
-A simple peer-to-peer video chat application using WebRTC and PeerJS.
-
-## Features
-- Video and audio calls
-- Camera and microphone selection
-- Mute controls
-- Peer-to-peer communication
-- No server required for calls (uses PeerJS broker)
-
-## Usage
-1. Open the website
-2. Click "Start Camera & Mic"
-3. Click "Connect" to get your ID
-4. Share your ID with a friend
-5. Enter their ID and click "Call"
-
-The site is hosted at: https://primit-progenis.github.io/video-chat/
+Camera and microphone access generally requires localhost or HTTPS. The project configures a STUN server but no TURN server, so direct connections may fail on some networks. The signaling server is a minimal demo and does not provide authentication or private-room access controls.
